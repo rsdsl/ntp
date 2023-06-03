@@ -6,6 +6,7 @@ use nix::sys::time::TimeSpec;
 use nix::time::ClockId;
 use thiserror::Error;
 
+const EPOCH_OFFSET: i64 = 2208988800;
 const NTP_SERVER: &str = "81.7.16.52:123"; // 0.pool.ntp.org
 
 #[derive(Debug, Error)]
@@ -28,7 +29,7 @@ fn main() -> Result<()> {
     for i in 0..3 {
         match ntp::request(NTP_SERVER) {
             Ok(resp) => {
-                let timespec = TimeSpec::new(resp.transmit_time.sec.into(), 0);
+                let timespec = TimeSpec::new(resp.transmit_time.sec as i64 - EPOCH_OFFSET, 0);
                 println!("server time is {}", timespec);
 
                 nix::time::clock_settime(ClockId::CLOCK_REALTIME, timespec)?;
