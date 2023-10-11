@@ -5,13 +5,14 @@ use std::path::Path;
 use std::thread;
 use std::time::Duration;
 
+use chrono::DateTime;
 use nix::sys::time::TimeSpec;
 use nix::time::ClockId;
 use thiserror::Error;
 use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts};
 use trust_dns_resolver::Resolver;
 
-const EPOCH_OFFSET: u64 = 2208988800;
+const EPOCH_OFFSET: i64 = 2208988800;
 const NTP_SERVER: &str = "2.pool.ntp.org";
 const NTP_PORT: u16 = 123;
 const DNS_SERVER: &str = "[2620:fe::fe]:53";
@@ -27,6 +28,8 @@ enum Error {
     #[error("can't parse network address: {0}")]
     ParseAddr(#[from] net::AddrParseError),
 
+    #[error("chrono parse: {0}")]
+    ChronoParse(#[from] chrono::ParseError),
     #[error("nix errno: {0}")]
     NixErrno(#[from] nix::errno::Errno),
     #[error("ntp: {0}")]
@@ -54,26 +57,27 @@ fn main() -> Result<()> {
     }
 }
 
-fn last_time_unix() -> Option<u64> {
-    Some(u64::from_be_bytes(
+fn last_time_unix() -> Option<i64> {
+    Some(i64::from_be_bytes(
         fs::read("/data/ntp.last_unix").ok()?[..8].try_into().ok()?,
     ))
 }
 
 fn sync_time(server: &str) -> Result<()> {
-    let last = last_time_unix().unwrap_or(0);
+    let last = last_time_unix()
+        .unwrap_or(DateTime::parse_from_rfc3339(env!("SOURCE_TIMESTAMP"))?.timestamp());
 
     let dns = DNS_SERVER.parse()?;
     let server_resolved = SocketAddr::new(resolve_custom_dns(server, dns)?, NTP_PORT);
 
     let time = ntp::request(server_resolved)?.transmit_time;
 
-    let mut t = time.sec as u64 - EPOCH_OFFSET;
+    let mut t = time.sec as i64 - EPOCH_OFFSET;
     while t < last {
-        t += 2_u64.pow(32); // NTP era duration.
+        t += 2_i64.pow(32); // NTP era duration.
     }
 
-    let timespec = TimeSpec::new(t as i64, 0);
+    let timespec = TimeSpec::new(t, 0);
     nix::time::clock_settime(ClockId::CLOCK_REALTIME, timespec)?;
 
     fs::write("/data/ntp.last_unix", t.to_be_bytes())?;

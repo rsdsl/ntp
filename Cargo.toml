@@ -6,8 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+chrono = "0.4.31"
 nix = { version = "0.26.2", features = ["time"] }
 ntp = "0.5.0"
 rsdsl_ip_config = { git = "https://github.com/rsdsl/ip_config.git", version = "0.2.2" }
 thiserror = "1.0"
 trust-dns-resolver = "0.23.0"
+
+[build-dependencies]
+build-data = "0.1.5"
