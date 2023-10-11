@@ -10,3 +10,4 @@ nix = { version = "0.26.2", features = ["time"] }
 ntp = "0.5.0"
 rsdsl_ip_config = { git = "https://github.com/rsdsl/ip_config.git", version = "0.2.2" }
 thiserror = "1.0"
+trust-dns-resolver = "0.23.0"
