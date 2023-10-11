@@ -1,3 +1,4 @@
+use std::fs;
 use std::io;
 use std::net::{self, IpAddr, SocketAddr};
 use std::path::Path;
@@ -10,7 +11,7 @@ use thiserror::Error;
 use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts};
 use trust_dns_resolver::Resolver;
 
-const EPOCH_OFFSET: i64 = 2208988800;
+const EPOCH_OFFSET: u64 = 2208988800;
 const NTP_SERVER: &str = "2.pool.ntp.org";
 const NTP_PORT: u16 = 123;
 const DNS_SERVER: &str = "[2620:fe::fe]:53";
@@ -53,14 +54,29 @@ fn main() -> Result<()> {
     }
 }
 
+fn last_time_unix() -> Option<u64> {
+    Some(u64::from_be_bytes(
+        fs::read("/data/ntp.last_unix").ok()?[..8].try_into().ok()?,
+    ))
+}
+
 fn sync_time(server: &str) -> Result<()> {
+    let last = last_time_unix().unwrap_or(0);
+
     let dns = DNS_SERVER.parse()?;
     let server_resolved = SocketAddr::new(resolve_custom_dns(server, dns)?, NTP_PORT);
 
     let time = ntp::request(server_resolved)?.transmit_time;
 
-    let timespec = TimeSpec::new(time.sec as i64 - EPOCH_OFFSET, 0);
+    let mut t = time.sec as u64 - EPOCH_OFFSET;
+    while t < last {
+        t += 2_u64.pow(32); // NTP era duration.
+    }
+
+    let timespec = TimeSpec::new(t as i64, 0);
     nix::time::clock_settime(ClockId::CLOCK_REALTIME, timespec)?;
+
+    fs::write("/data/ntp.last_unix", t.to_be_bytes())?;
 
     println!("set system time");
     Ok(())
