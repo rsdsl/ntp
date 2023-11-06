@@ -9,7 +9,7 @@ edition = "2021"
 chrono = "0.4.31"
 nix = { version = "0.26.2", features = ["time"] }
 ntp = "0.5.0"
-rsdsl_ip_config = { git = "https://github.com/rsdsl/ip_config.git", version = "0.2.2" }
+rsdsl_ip_config = { git = "https://github.com/rsdsl/ip_config.git", version = "0.2.4" }
 thiserror = "1.0"
 trust-dns-resolver = "0.23.0"
 
