@@ -8,11 +8,11 @@ use tokio::fs;
 use tokio::signal::unix::{signal, SignalKind};
 
 use chrono::DateTime;
+use hickory_resolver::config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts};
+use hickory_resolver::AsyncResolver;
 use nix::sys::time::TimeSpec;
 use nix::time::ClockId;
 use thiserror::Error;
-use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts};
-use trust_dns_resolver::Resolver;
 
 const EPOCH_OFFSET: i64 = 2208988800;
 const LAST_UNIX_PATH: &str = "/data/ntp.last_unix";
@@ -43,8 +43,8 @@ enum Error {
     NixErrno(#[from] nix::errno::Errno),
     #[error("ntp: {0}")]
     Ntp(#[from] ntp::errors::Error),
-    #[error("trust_dns_resolver resolve error: {0}")]
-    TrustDnsResolve(#[from] trust_dns_resolver::error::ResolveError),
+    #[error("hickory_resolver resolve error: {0}")]
+    HickoryResolve(#[from] hickory_resolver::error::ResolveError),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -114,7 +114,7 @@ async fn sync_time(server: &str) -> Result<()> {
         .unwrap_or(DateTime::parse_from_rfc3339(env!("SOURCE_TIMESTAMP"))?.timestamp());
 
     let dns = DNS_SERVER.parse()?;
-    let server_resolved = SocketAddr::new(resolve_custom_dns(server, dns)?, NTP_PORT);
+    let server_resolved = SocketAddr::new(resolve_custom_dns(server, dns).await?, NTP_PORT);
 
     let time = ntp::request(server_resolved)?.transmit_time;
 
@@ -132,13 +132,13 @@ async fn sync_time(server: &str) -> Result<()> {
     Ok(())
 }
 
-fn resolve_custom_dns(hostname: &str, custom_dns: SocketAddr) -> Result<IpAddr> {
+async fn resolve_custom_dns(hostname: &str, custom_dns: SocketAddr) -> Result<IpAddr> {
     let mut cfg = ResolverConfig::new();
 
     cfg.add_name_server(NameServerConfig::new(custom_dns, Protocol::Udp));
 
-    let resolver = Resolver::new(cfg, ResolverOpts::default())?;
-    let response = resolver.lookup_ip(hostname)?;
+    let resolver = AsyncResolver::tokio(cfg, ResolverOpts::default());
+    let response = resolver.lookup_ip(hostname).await?;
 
     let ip_addr = response.iter().next().ok_or(Error::NoHostname)?;
     Ok(ip_addr)
