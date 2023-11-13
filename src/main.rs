@@ -1,9 +1,12 @@
-use std::fs;
 use std::io;
 use std::net::{self, IpAddr, SocketAddr};
+use std::num;
 use std::path::Path;
 use std::thread;
-use std::time::Duration;
+use std::time::{self, Duration, SystemTime};
+
+use tokio::fs;
+use tokio::signal::unix::{signal, SignalKind};
 
 use chrono::DateTime;
 use nix::sys::time::TimeSpec;
@@ -27,6 +30,10 @@ enum Error {
     Io(#[from] io::Error),
     #[error("can't parse network address: {0}")]
     ParseAddr(#[from] net::AddrParseError),
+    #[error("system time monotonicity error: {0}")]
+    SystemTime(#[from] time::SystemTimeError),
+    #[error("integer doesn't fit: {0}")]
+    TryFromInt(#[from] num::TryFromIntError),
 
     #[error("chrono parse: {0}")]
     ChronoParse(#[from] chrono::ParseError),
@@ -40,31 +47,54 @@ enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let ds_config = Path::new(rsdsl_ip_config::LOCATION);
     while !ds_config.exists() {
         println!("wait for pppoe");
         thread::sleep(Duration::from_secs(8));
     }
 
-    loop {
-        match sync_time(NTP_SERVER) {
-            Ok(_) => {}
-            Err(e) => eprintln!("can't synchronize system time: {}", e),
-        }
+    let mut resync = tokio::time::interval(INTERVAL);
+    let mut sigterm = signal(SignalKind::terminate())?;
 
-        thread::sleep(INTERVAL);
+    loop {
+        tokio::select! {
+            _ = resync.tick() => match sync_time(NTP_SERVER).await {
+                Ok(_) => {}
+                Err(e) => eprintln!("can't synchronize system time: {}", e),
+            },
+            _ = sigterm.recv() => {
+                sysnow_to_disk().await?;
+
+                println!("save system time");
+                return Ok(());
+            }
+        }
     }
 }
 
-fn last_time_unix() -> Option<i64> {
+async fn last_time_unix() -> Option<i64> {
     Some(i64::from_be_bytes(
-        fs::read("/data/ntp.last_unix").ok()?[..8].try_into().ok()?,
+        fs::read("/data/ntp.last_unix").await.ok()?[..8]
+            .try_into()
+            .ok()?,
     ))
 }
 
-fn sync_time(server: &str) -> Result<()> {
+async fn sysnow_to_disk() -> Result<()> {
+    let t: i64 = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)?
+        .as_secs()
+        .try_into()?;
+    fs::write("/data/ntp.last_unix", t.to_be_bytes()).await?;
+
+    Ok(())
+}
+
+async fn sync_time(server: &str) -> Result<()> {
     let last = last_time_unix()
+        .await
         .unwrap_or(DateTime::parse_from_rfc3339(env!("SOURCE_TIMESTAMP"))?.timestamp());
 
     let dns = DNS_SERVER.parse()?;
@@ -80,7 +110,7 @@ fn sync_time(server: &str) -> Result<()> {
     let timespec = TimeSpec::new(t, 0);
     nix::time::clock_settime(ClockId::CLOCK_REALTIME, timespec)?;
 
-    fs::write("/data/ntp.last_unix", t.to_be_bytes())?;
+    fs::write("/data/ntp.last_unix", t.to_be_bytes()).await?;
 
     println!("set system time");
     Ok(())
