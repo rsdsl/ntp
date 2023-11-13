@@ -15,6 +15,7 @@ use trust_dns_resolver::config::{NameServerConfig, Protocol, ResolverConfig, Res
 use trust_dns_resolver::Resolver;
 
 const EPOCH_OFFSET: i64 = 2208988800;
+const LAST_UNIX_PATH: &str = "/data/ntp.last_unix";
 const NTP_SERVER: &str = "2.pool.ntp.org";
 const NTP_PORT: u16 = 123;
 const DNS_SERVER: &str = "[2620:fe::fe]:53";
@@ -84,9 +85,7 @@ async fn main() -> Result<()> {
 
 async fn last_time_unix() -> Option<i64> {
     Some(i64::from_be_bytes(
-        fs::read("/data/ntp.last_unix").await.ok()?[..8]
-            .try_into()
-            .ok()?,
+        fs::read(LAST_UNIX_PATH).await.ok()?[..8].try_into().ok()?,
     ))
 }
 
@@ -95,13 +94,13 @@ async fn sysnow_to_disk() -> Result<()> {
         .duration_since(SystemTime::UNIX_EPOCH)?
         .as_secs()
         .try_into()?;
-    fs::write("/data/ntp.last_unix", t.to_be_bytes()).await?;
+    fs::write(LAST_UNIX_PATH, t.to_be_bytes()).await?;
 
     Ok(())
 }
 
 async fn disk_to_sys() -> Result<()> {
-    let t = i64::from_be_bytes(fs::read("/data/ntp.last_unix").await?[..8].try_into()?);
+    let t = i64::from_be_bytes(fs::read(LAST_UNIX_PATH).await?[..8].try_into()?);
     let timespec = TimeSpec::new(t, 0);
 
     nix::time::clock_settime(ClockId::CLOCK_REALTIME, timespec)?;
@@ -127,7 +126,7 @@ async fn sync_time(server: &str) -> Result<()> {
     let timespec = TimeSpec::new(t, 0);
     nix::time::clock_settime(ClockId::CLOCK_REALTIME, timespec)?;
 
-    fs::write("/data/ntp.last_unix", t.to_be_bytes()).await?;
+    fs::write(LAST_UNIX_PATH, t.to_be_bytes()).await?;
 
     println!("set system time");
     Ok(())
