@@ -26,7 +26,7 @@ enum Error {
     #[error("can't find ntp server hostname")]
     NoHostname,
 
-    #[error("io: {0}")]
+    #[error("io error: {0}")]
     Io(#[from] io::Error),
     #[error("can't parse network address: {0}")]
     ParseAddr(#[from] net::AddrParseError),
@@ -37,11 +37,11 @@ enum Error {
     #[error("slice length does not equal array length: {0}")]
     TryFromSlice(#[from] array::TryFromSliceError),
 
-    #[error("chrono parse: {0}")]
+    #[error("can't parse (build) timestamp using chrono: {0}")]
     ChronoParse(#[from] chrono::ParseError),
     #[error("nix errno: {0}")]
     NixErrno(#[from] nix::errno::Errno),
-    #[error("ntp: {0}")]
+    #[error("ntp error: {0}")]
     Ntp(#[from] ntp::errors::Error),
     #[error("hickory_resolver resolve error: {0}")]
     HickoryResolve(#[from] hickory_resolver::error::ResolveError),
