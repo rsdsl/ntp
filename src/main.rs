@@ -1,9 +1,8 @@
-use std::io;
 use std::net::{self, IpAddr, SocketAddr};
-use std::num;
 use std::path::Path;
 use std::thread;
 use std::time::{self, Duration, SystemTime};
+use std::{array, io, num};
 
 use tokio::fs;
 use tokio::signal::unix::{signal, SignalKind};
@@ -34,6 +33,8 @@ enum Error {
     SystemTime(#[from] time::SystemTimeError),
     #[error("integer doesn't fit: {0}")]
     TryFromInt(#[from] num::TryFromIntError),
+    #[error("slice length does not equal array length: {0}")]
+    TryFromSlice(#[from] array::TryFromSliceError),
 
     #[error("chrono parse: {0}")]
     ChronoParse(#[from] chrono::ParseError),
@@ -49,6 +50,13 @@ type Result<T> = std::result::Result<T, Error>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    println!("init");
+
+    match disk_to_sys().await {
+        Ok(_) => println!("load system time"),
+        Err(e) => eprintln!("can't load system time: {}", e),
+    }
+
     let ds_config = Path::new(rsdsl_ip_config::LOCATION);
     while !ds_config.exists() {
         println!("wait for pppoe");
@@ -88,6 +96,15 @@ async fn sysnow_to_disk() -> Result<()> {
         .as_secs()
         .try_into()?;
     fs::write("/data/ntp.last_unix", t.to_be_bytes()).await?;
+
+    Ok(())
+}
+
+async fn disk_to_sys() -> Result<()> {
+    let t = i64::from_be_bytes(fs::read("/data/ntp.last_unix").await?[..8].try_into()?);
+    let timespec = TimeSpec::new(t, 0);
+
+    nix::time::clock_settime(ClockId::CLOCK_REALTIME, timespec)?;
 
     Ok(())
 }
