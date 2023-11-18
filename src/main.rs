@@ -11,6 +11,7 @@ use hickory_resolver::AsyncResolver;
 use nix::sys::time::TimeSpec;
 use nix::time::ClockId;
 use rsdsl_netlinklib::Connection;
+use sysinfo::{ProcessExt, Signal, System, SystemExt};
 use thiserror::Error;
 
 const EPOCH_OFFSET: i64 = 2208988800;
@@ -71,7 +72,13 @@ async fn main() -> Result<()> {
     loop {
         tokio::select! {
             _ = resync.tick() => match sync_time(NTP_SERVER).await {
-                Ok(_) => resync = tokio::time::interval(INTERVAL),
+                Ok(_) => {
+                    resync = tokio::time::interval(INTERVAL);
+
+                    for dhcp6 in System::new_all().processes_by_exact_name("rsdsl_dhcp6") {
+                        dhcp6.kill_with(Signal::User2);
+                    }
+                }
                 Err(e) => eprintln!("can't synchronize system time: {}", e),
             },
             _ = sigterm.recv() => {
