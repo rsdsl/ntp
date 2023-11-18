@@ -72,16 +72,21 @@ async fn main() -> Result<()> {
 
     resync.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
+    let mut first_sync = true;
     loop {
         tokio::select! {
             _ = resync.tick() => match sync_time(NTP_SERVER).await {
                 Ok(_) => {
-                    resync = tokio::time::interval(INTERVAL);
-                    resync.reset();
-                    resync.set_missed_tick_behavior(MissedTickBehavior::Skip);
+                    if first_sync {
+                        resync = tokio::time::interval(INTERVAL);
+                        resync.reset();
+                        resync.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
-                    for dhcp6 in System::new_all().processes_by_exact_name("rsdsl_dhcp6") {
-                        dhcp6.kill_with(Signal::User2);
+                        for dhcp6 in System::new_all().processes_by_exact_name("rsdsl_dhcp6") {
+                            dhcp6.kill_with(Signal::User2);
+                        }
+
+                        first_sync = false;
                     }
                 }
                 Err(e) => eprintln!("can't synchronize system time: {}", e),
