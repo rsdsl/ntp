@@ -18,6 +18,7 @@ const LAST_UNIX_PATH: &str = "/data/ntp.last_unix";
 const NTP_SERVER: &str = "2.pool.ntp.org";
 const NTP_PORT: u16 = 123;
 const DNS_SERVER: &str = "[2620:fe::fe]:53";
+const INITIAL_INTERVAL: Duration = Duration::from_secs(30);
 const INTERVAL: Duration = Duration::from_secs(3600);
 
 #[derive(Debug, Error)]
@@ -64,13 +65,13 @@ async fn main() -> Result<()> {
     let conn = Connection::new().await?;
     conn.link_wait_up("ppp0".into()).await?;
 
-    let mut resync = tokio::time::interval(INTERVAL);
+    let mut resync = tokio::time::interval(INITIAL_INTERVAL);
     let mut sigterm = signal(SignalKind::terminate())?;
 
     loop {
         tokio::select! {
             _ = resync.tick() => match sync_time(NTP_SERVER).await {
-                Ok(_) => {}
+                Ok(_) => resync = tokio::time::interval(INTERVAL),
                 Err(e) => eprintln!("can't synchronize system time: {}", e),
             },
             _ = sigterm.recv() => {
