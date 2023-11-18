@@ -4,6 +4,7 @@ use std::{array, io, num};
 
 use tokio::fs;
 use tokio::signal::unix::{signal, SignalKind};
+use tokio::time::MissedTickBehavior;
 
 use chrono::DateTime;
 use hickory_resolver::config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts};
@@ -69,11 +70,14 @@ async fn main() -> Result<()> {
     let mut resync = tokio::time::interval(INITIAL_INTERVAL);
     let mut sigterm = signal(SignalKind::terminate())?;
 
+    resync.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
     loop {
         tokio::select! {
             _ = resync.tick() => match sync_time(NTP_SERVER).await {
                 Ok(_) => {
                     resync = tokio::time::interval(INTERVAL);
+                    resync.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
                     for dhcp6 in System::new_all().processes_by_exact_name("rsdsl_dhcp6") {
                         dhcp6.kill_with(Signal::User2);
