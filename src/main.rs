@@ -1,6 +1,4 @@
 use std::net::{self, IpAddr, SocketAddr};
-use std::path::Path;
-use std::thread;
 use std::time::{self, Duration, SystemTime};
 use std::{array, io, num};
 
@@ -12,6 +10,7 @@ use hickory_resolver::config::{NameServerConfig, Protocol, ResolverConfig, Resol
 use hickory_resolver::AsyncResolver;
 use nix::sys::time::TimeSpec;
 use nix::time::ClockId;
+use rsdsl_netlinklib::Connection;
 use thiserror::Error;
 
 const EPOCH_OFFSET: i64 = 2208988800;
@@ -45,6 +44,8 @@ enum Error {
     Ntp(#[from] ntp::errors::Error),
     #[error("hickory_resolver resolve error: {0}")]
     HickoryResolve(#[from] hickory_resolver::error::ResolveError),
+    #[error("netlinklib error: {0}")]
+    Netlinklib(#[from] rsdsl_netlinklib::Error),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -58,11 +59,10 @@ async fn main() -> Result<()> {
         Err(e) => eprintln!("can't load system time: {}", e),
     }
 
-    let ds_config = Path::new(rsdsl_ip_config::LOCATION);
-    while !ds_config.exists() {
-        println!("wait for pppoe");
-        thread::sleep(Duration::from_secs(8));
-    }
+    println!("wait for pppoe");
+
+    let conn = Connection::new().await?;
+    conn.link_wait_up("ppp0".into()).await?;
 
     let mut resync = tokio::time::interval(INTERVAL);
     let mut sigterm = signal(SignalKind::terminate())?;
