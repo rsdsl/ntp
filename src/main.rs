@@ -77,6 +77,7 @@ async fn main() -> Result<()> {
             _ = resync.tick() => match sync_time(NTP_SERVER).await {
                 Ok(_) => {
                     resync = tokio::time::interval(INTERVAL);
+                    resync.reset();
                     resync.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
                     for dhcp6 in System::new_all().processes_by_exact_name("rsdsl_dhcp6") {
