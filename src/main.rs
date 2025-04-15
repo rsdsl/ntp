@@ -19,7 +19,7 @@ const EPOCH_OFFSET: i64 = 2208988800;
 const LAST_UNIX_PATH: &str = "/data/ntp.last_unix";
 const NTP_SERVER: &str = "2.pool.ntp.org";
 const NTP_PORT: u16 = 123;
-const DNS_SERVER: &str = "[2620:fe::fe]:53";
+const DNS_SERVER: &str = "9.9.9.9:53";
 const INITIAL_INTERVAL: Duration = Duration::from_secs(30);
 const INTERVAL: Duration = Duration::from_secs(3600);
 
