@@ -55,14 +55,14 @@ type Result<T> = std::result::Result<T, Error>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("init");
+    eprintln!("init");
 
     match disk_to_sys().await {
-        Ok(_) => println!("load system time"),
+        Ok(_) => eprintln!("load system time"),
         Err(e) => eprintln!("can't load system time: {}", e),
     }
 
-    println!("wait for pppoe");
+    eprintln!("wait for pppoe");
 
     let conn = Connection::new().await?;
     conn.link_wait_up("ppp0".into()).await?;
@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
             _ = sigterm.recv() => {
                 sysnow_to_disk().await?;
 
-                println!("save system time");
+                eprintln!("save system time");
                 return Ok(());
             }
         }
@@ -146,7 +146,7 @@ async fn sync_time(server: &str) -> Result<()> {
 
     fs::write(LAST_UNIX_PATH, t.to_be_bytes()).await?;
 
-    println!("set system time");
+    eprintln!("set system time");
     Ok(())
 }
 
